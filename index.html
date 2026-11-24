@@ -337,10 +337,10 @@ details.d-section[open] summary{margin-bottom:12px}
 "use strict";
 const HSG = {lat:47.4300025, lon:9.3722184};
 const FEB1 = Date.UTC(2027,1,1), JUN30 = Date.UTC(2027,5,30), DAY = 86400000, MONTH = DAY*30.44;
-const STATI = ["Da aprire","Da contattare","Contattato","Visita fissata","Risposta ricevuta","Presa","Non più disponibile","Scartato"];
+const STATI = ["Da aprire","Contattato","Visita fissata","Presa","Di riserva","Non più disponibile","Scartato"];
 const FCLASS = {"In target":"ok","Poco sopra":"warn","Da verificare":"info","Fuori budget":"out","Scartato":"bad"};
 const MODES = {solo:{label:"Da solo",full:500,target:700,max:750,who:"1 persona"},due:{label:"Per due",full:1000,target:1400,max:1500,who:"2 persone, 2 camere"}};
-const SCOLOR = {"Da aprire":"var(--faint)","Da contattare":"var(--pin-warn)","Contattato":"var(--pin-info)","Visita fissata":"#7a5cc2","Risposta ricevuta":"#1a8a8a","Presa":"var(--pin-ok)","Non più disponibile":"var(--faint)","Scartato":"var(--bad)"};
+const SCOLOR = {"Da aprire":"var(--faint)","Da contattare":"var(--pin-warn)","Contattato":"var(--pin-info)","Visita fissata":"#7a5cc2","Di riserva":"#b07a2a","Presa":"var(--pin-ok)","Non più disponibile":"var(--faint)","Scartato":"var(--bad)"};
 const DEF = {pesi:{prezzo:35,distanza:25,date:20,contratto:10,spese:10},penalitaMese:5};
 const LABELS = {prezzo:"Prezzo",distanza:"Distanza",date:"Date",contratto:"Contratto",spese:"Spese incluse"};
 const VIEWS = [["classifica","Classifica","i-list"],["mappa","Mappa","i-map"],["archivio","Archiviati","i-archive"],["pesi","Impostazioni","i-sliders"]];
@@ -375,7 +375,7 @@ function fmtKm(k){return k.toLocaleString("it-IT",{maximumFractionDigits:1,minim
 function walk(k){return Math.round(k*1.3/4.8*60);}
 function plural(n,s,p){return n+" "+(n===1?s:p);}
 function loadFilt(){try{const f=JSON.parse(localStorage.getItem("csg-filt")||"null");if(f&&typeof f==="object")return Object.assign(defFilt(),f);}catch(e){}return defFilt();}
-function defFilt(){return {fasce:["In target","Poco sopra","Da verificare"],max:1600,tipo:"",stato:"",fonte:"",pref:false,km:0,entro:false,spese:false,arredato:false,nuovi:false,sort:"punteggio"};}
+function defFilt(){return {fasce:["In target","Poco sopra","Da verificare"],max:1600,tipo:"",stato:"",fonte:"",pref:false,km:0,entro:false,spese:false,arredato:false,nuovi:false,sort:"punteggio",ris:false};}
 function saveFilt(){try{localStorage.setItem("csg-filt",JSON.stringify(S.filt));}catch(e){}}
 function toast(msg){const t=$("#toast");t.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,2200);}
 function isActive(a){return a.stato!=="Scartato"&&a.stato!=="Non più disponibile"&&a.fascia!=="Scartato";}
@@ -445,7 +445,7 @@ function mates(a){
 function filtered(){
   const f=S.filt;
   return S.ann.filter(isActive).filter(a=>inMode(a)).filter(a=>
-    (f.pref?a.preferito===true:f.fasce.includes(fasciaOf(a))) &&
+    (f.ris?a.stato==="Di riserva":f.pref?a.preferito===true:(a.stato!=="Di riserva"&&f.fasce.includes(fasciaOf(a)))) &&
     (!f.km||(km(a)!=null&&km(a)<=f.km)) &&
     (!f.entro||(d(a.dal)!=null&&d(a.dal)<=FEB1)) &&
     (!f.spese||a.spese==="incluse") &&
@@ -514,7 +514,7 @@ function renderList(){
   $("#summary").innerHTML=
     '<div class="stat"><b class="num">'+act.length+'</b><span>attivi</span></div>'+
     '<div class="stat"><b class="num">'+act.filter(a=>fasciaOf(a)==="In target").length+'</b><span>in target</span></div>'+
-    '<div class="stat"><b class="num">'+act.filter(a=>a.stato==="Da contattare").length+'</b><span>da contattare</span></div>';
+    '<div class="stat"><b class="num">'+act.filter(a=>a.stato==="Contattato"||a.stato==="Visita fissata").length+'</b><span>in corso</span></div>';
   const list=ranked(filtered());
   $("#list").innerHTML=list.length?list.map(({a,s})=>card(a,s)).join(""):
     (S.mode==="due"&&!S.ann.some(a=>inMode(a,"due"))?notice("Ancora nessun annuncio per due","L’agente cerca appartamenti con 2 camere e WG con 2 stanze libere a ogni controllo. Compariranno qui."):
@@ -523,7 +523,9 @@ function renderList(){
 function renderFilters(){
   const f=S.filt, cnt=(f.max<1600?1:0)+(f.tipo?1:0)+(f.stato?1:0)+(f.fonte?1:0)+(f.km?1:0)+(f.entro?1:0)+(f.spese?1:0)+(f.arredato?1:0)+(f.nuovi?1:0)+(f.sort!=="punteggio"?1:0);
   const nPref=S.ann.filter(a=>a.preferito===true&&isActive(a)&&inMode(a)).length;
-  $("#filters").innerHTML='<button type="button" class="chip" id="f-pref" aria-pressed="'+!!f.pref+'"><span aria-hidden="true">'+(f.pref?"★":"☆")+'</span>Preferiti'+(nPref?" ("+nPref+")":"")+'</button>'+(f.pref?"":["In target","Poco sopra","Da verificare","Fuori budget"].map(x=>'<button type="button" class="chip" data-fascia="'+esc(x)+'" aria-pressed="'+f.fasce.includes(x)+'"><span class="dot" style="background:var(--pin-'+FCLASS[x]+')"></span>'+esc(x)+'</button>').join(""))+
+  const nRis=S.ann.filter(a=>a.stato==="Di riserva"&&isActive(a)&&inMode(a)).length;
+  $("#filters").innerHTML='<button type="button" class="chip" id="f-pref" aria-pressed="'+!!f.pref+'"><span aria-hidden="true">'+(f.pref?"★":"☆")+'</span>Preferiti'+(nPref?" ("+nPref+")":"")+'</button>'+
+    '<button type="button" class="chip" id="f-ris" aria-pressed="'+!!f.ris+'"><span class="dot" style="background:#b07a2a"></span>Di riserva'+(nRis?" ("+nRis+")":"")+'</button>'+(f.pref||f.ris?"":["In target","Poco sopra","Da verificare","Fuori budget"].map(x=>'<button type="button" class="chip" data-fascia="'+esc(x)+'" aria-pressed="'+f.fasce.includes(x)+'"><span class="dot" style="background:var(--pin-'+FCLASS[x]+')"></span>'+esc(x)+'</button>').join(""))+
     '<button type="button" class="chip more" id="btn-filt" aria-expanded="'+S.panel+'">'+icon("i-sliders").replace("<svg",'<svg width="15" height="15"')+'Filtri'+(cnt?" ("+cnt+")":"")+'</button>';
   const fonti=[...new Set(S.ann.map(a=>a.fonte).filter(Boolean))];
   const p=$("#filter-panel");p.hidden=!S.panel;
@@ -534,7 +536,7 @@ function renderFilters(){
    '<div class="field"><label for="f-km">Distanza max dall\u2019HSG: <b class="num">'+(f.km?String(f.km).replace(".",",")+" km":"nessuna")+'</b></label><input id="f-km" type="range" min="0" max="5" step="0.5" value="'+(f.km||0)+'"></div>'+
    '<div class="field"><label for="f-max">Prezzo massimo: <b class="num">'+(f.max>=1600?"nessuno":"CHF "+f.max)+'</b></label><input id="f-max" type="range" min="300" max="1600" step="10" value="'+f.max+'"></div>'+
    '<div class="field"><label for="f-tipo">Tipo</label><select id="f-tipo"><option value="">Tutti</option>'+[["stanza","Stanza"],["monolocale","Monolocale"],["appartamento","Appartamento per due"]].map(([v,l])=>'<option value="'+v+'"'+(f.tipo===v?" selected":"")+'>'+l+'</option>').join("")+'</select></div>'+
-   '<div class="field"><label for="f-stato">Stato</label><select id="f-stato"><option value="">Tutti</option>'+STATI.slice(0,6).map(v=>'<option'+(f.stato===v?" selected":"")+'>'+esc(v)+'</option>').join("")+'</select></div>'+
+   '<div class="field"><label for="f-stato">Stato</label><select id="f-stato"><option value="">Tutti</option>'+STATI.slice(0,5).map(v=>'<option'+(f.stato===v?" selected":"")+'>'+esc(v)+'</option>').join("")+'</select></div>'+
    '<div class="field"><label for="f-fonte">Fonte</label><select id="f-fonte"><option value="">Tutte</option>'+fonti.map(v=>'<option'+(f.fonte===v?" selected":"")+'>'+esc(v)+'</option>').join("")+'</select></div>'+
    '<div class="field cks">'+ck("f-entro",f.entro,"Ingresso entro il 1° febbraio")+ck("f-spese",f.spese,"Spese incluse")+ck("f-arredato",f.arredato,"Arredato")+ck("f-nuovi",f.nuovi,"Solo nuovi (ultimi 2 giorni)")+'</div>'+
    '<div class="field" style="justify-content:flex-end"><button type="button" class="btn ghost" id="f-reset">Azzera filtri</button></div>';
@@ -773,7 +775,8 @@ document.addEventListener("click",async e=>{
   if(t.dataset.fascia){const f=S.filt.fasce,x=t.dataset.fascia;S.filt.fasce=f.includes(x)?f.filter(y=>y!==x):f.concat(x);saveFilt();renderList();return;}
   if(t.id==="btn-filt"){S.panel=!S.panel;renderFilters();return;}
   if(t.id==="f-reset"){S.filt=defFilt();saveFilt();renderList();syncMarkers();return;}
-  if(t.id==="f-pref"){S.filt.pref=!S.filt.pref;saveFilt();renderList();syncMarkers();return;}
+  if(t.id==="f-ris"){S.filt.ris=!S.filt.ris;if(S.filt.ris)S.filt.pref=false;saveFilt();renderList();syncMarkers();return;}
+  if(t.id==="f-pref"){S.filt.pref=!S.filt.pref;if(S.filt.pref)S.filt.ris=false;saveFilt();renderList();syncMarkers();return;}
   if(t.dataset.star){const a=byId(t.dataset.star);if(!a)return;e.stopPropagation();t.disabled=true;await write(a._id,{preferito:!(a.preferito===true)},a.preferito===true?"Tolto dai preferiti":"Aggiunto ai preferiti");t.disabled=false;return;}
   if(t.dataset.goto){S.sel=t.dataset.goto;location.hash="mappa";setTimeout(()=>select(S.sel,true),60);return;}
   if(t.dataset.sel){select(t.dataset.sel,true);return;}
