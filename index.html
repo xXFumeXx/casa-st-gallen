@@ -208,6 +208,8 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 details.d-section summary{cursor:pointer;font:600 14px var(--font-head);list-style:none;display:flex;justify-content:space-between}
 details.d-section summary::-webkit-details-marker{display:none}
 details.d-section[open] summary{margin-bottom:12px}
+.filters.stati{margin-top:-4px}
+.filters.stati .chip{font-size:12.5px;min-height:30px;padding:4px 10px}
 .seg-stato{display:flex;flex-wrap:wrap;gap:8px}
 .mine .mt{margin-top:10px}
 .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
@@ -287,6 +289,7 @@ details.d-section[open] summary{margin-bottom:12px}
     <div id="checkline"></div>
     <div class="summary" id="summary"></div>
     <div class="filters" id="filters"></div>
+    <div class="filters stati" id="stati-bar"></div>
     <div class="panel" id="filter-panel" hidden></div>
     <div id="list" class="list"></div>
   </section>
@@ -447,14 +450,14 @@ function mates(a){
 function filtered(){
   const f=S.filt;
   return S.ann.filter(isActive).filter(a=>inMode(a)).filter(a=>
-    (f.ris?a.stato==="Di riserva":f.pref?a.preferito===true:(a.stato!=="Di riserva"&&f.fasce.includes(fasciaOf(a)))) &&
+    (f.ris?a.stato==="Di riserva":f.pref?a.preferito===true:f.stato?true:(a.stato!=="Di riserva"&&f.fasce.includes(fasciaOf(a)))) &&
     (!f.km||(km(a)!=null&&km(a)<=f.km)) &&
     (!f.entro||(d(a.dal)!=null&&d(a.dal)<=FEB1)) &&
     (!f.spese||a.spese==="incluse") &&
     (!f.arredato||a.arredato==="sì"||a.arredato==="parziale") &&
     (!f.nuovi||isNew(a)) &&
     (priceOf(a)==null||f.max>=1600||priceOf(a)<=f.max) &&
-    (!f.tipo||a.tipo===f.tipo) && (!f.stato||a.stato===f.stato) && (!f.fonte||a.fonte===f.fonte));
+    (!f.tipo||a.tipo===f.tipo) && (!f.stato||(a.stato||"Da aprire")===f.stato) && (!f.fonte||a.fonte===f.fonte));
 }
 function ranked(list){
   const by=S.filt.sort,P=x=>priceOf(x.a)??1e9,K=x=>km(x.a)??1e9,T=x=>d(x.a.scoperto)??0;
@@ -523,12 +526,16 @@ function renderList(){
      S.filt.ris?notice("Nessun annuncio di riserva","Apri un annuncio e tocca “Di riserva” per metterlo qui."):notice("Nessun annuncio con questi filtri",out&&!S.filt.fasce.includes("Fuori budget")?"Ci sono "+out+" annunci fuori budget: attiva il filtro “Fuori budget” per vederli.":"Allarga i filtri per vedere altri annunci."));
 }
 function renderFilters(){
-  const f=S.filt, cnt=(f.max<1600?1:0)+(f.tipo?1:0)+(f.stato?1:0)+(f.fonte?1:0)+(f.km?1:0)+(f.entro?1:0)+(f.spese?1:0)+(f.arredato?1:0)+(f.nuovi?1:0)+(f.sort!=="punteggio"?1:0);
+  const f=S.filt, cnt=(f.max<1600?1:0)+(f.tipo?1:0)+(f.fonte?1:0)+(f.km?1:0)+(f.entro?1:0)+(f.spese?1:0)+(f.arredato?1:0)+(f.nuovi?1:0)+(f.sort!=="punteggio"?1:0);
   const nPref=S.ann.filter(a=>a.preferito===true&&isActive(a)&&inMode(a)).length;
   const nRis=S.ann.filter(a=>a.stato==="Di riserva"&&isActive(a)&&inMode(a)).length;
   $("#filters").innerHTML='<button type="button" class="chip" id="f-pref" aria-pressed="'+!!f.pref+'"><span aria-hidden="true">'+(f.pref?"★":"☆")+'</span>Preferiti'+(nPref?" ("+nPref+")":"")+'</button>'+
-    '<button type="button" class="chip" id="f-ris" aria-pressed="'+!!f.ris+'"><span class="dot" style="background:#b07a2a"></span>Di riserva'+(nRis?" ("+nRis+")":"")+'</button>'+(f.pref||f.ris?"":["In target","Poco sopra","Da verificare","Fuori budget"].map(x=>'<button type="button" class="chip" data-fascia="'+esc(x)+'" aria-pressed="'+f.fasce.includes(x)+'"><span class="dot" style="background:var(--pin-'+FCLASS[x]+')"></span>'+esc(x)+'</button>').join(""))+
+    '<button type="button" class="chip" id="f-ris" aria-pressed="'+!!f.ris+'"><span class="dot" style="background:#b07a2a"></span>Di riserva'+(nRis?" ("+nRis+")":"")+'</button>'+(f.pref||f.ris||f.stato?"":["In target","Poco sopra","Da verificare","Fuori budget"].map(x=>'<button type="button" class="chip" data-fascia="'+esc(x)+'" aria-pressed="'+f.fasce.includes(x)+'"><span class="dot" style="background:var(--pin-'+FCLASS[x]+')"></span>'+esc(x)+'</button>').join(""))+
     '<button type="button" class="chip more" id="btn-filt" aria-expanded="'+S.panel+'">'+icon("i-sliders").replace("<svg",'<svg width="15" height="15"')+'Filtri'+(cnt?" ("+cnt+")":"")+'</button>';
+  const pool=S.ann.filter(a=>isActive(a)&&inMode(a));
+  $("#stati-bar").innerHTML=[["","Tutti gli stati"],["Da aprire"],["Contattato"],["Visita fissata"],["Presa"]].map(([v,l])=>{
+    const n=v?pool.filter(a=>(a.stato||"Da aprire")===v).length:0, on=(f.stato||"")===v;
+    return '<button type="button" class="chip" data-fstato="'+esc(v)+'" aria-pressed="'+on+'">'+(v?'<span class="dot" style="background:'+SCOLOR[v]+'"></span>':"")+esc(l||v)+(v&&n?" ("+n+")":"")+'</button>';}).join("");
   const fonti=[...new Set(S.ann.map(a=>a.fonte).filter(Boolean))];
   const p=$("#filter-panel");p.hidden=!S.panel;
   if(!S.panel)return;
@@ -779,8 +786,9 @@ document.addEventListener("click",async e=>{
   if(t.dataset.fascia){const f=S.filt.fasce,x=t.dataset.fascia;S.filt.fasce=f.includes(x)?f.filter(y=>y!==x):f.concat(x);saveFilt();renderList();return;}
   if(t.id==="btn-filt"){S.panel=!S.panel;renderFilters();return;}
   if(t.id==="f-reset"){S.filt=defFilt();saveFilt();renderList();syncMarkers();return;}
-  if(t.id==="f-ris"){S.filt.ris=!S.filt.ris;if(S.filt.ris)S.filt.pref=false;saveFilt();renderList();syncMarkers();return;}
-  if(t.id==="f-pref"){S.filt.pref=!S.filt.pref;if(S.filt.pref)S.filt.ris=false;saveFilt();renderList();syncMarkers();return;}
+  if(t.dataset.fstato!==undefined){S.filt.stato=t.dataset.fstato;if(S.filt.stato){S.filt.pref=false;S.filt.ris=false;}saveFilt();renderList();syncMarkers();return;}
+  if(t.id==="f-ris"){S.filt.ris=!S.filt.ris;if(S.filt.ris){S.filt.pref=false;S.filt.stato="";}saveFilt();renderList();syncMarkers();return;}
+  if(t.id==="f-pref"){S.filt.pref=!S.filt.pref;if(S.filt.pref){S.filt.ris=false;S.filt.stato="";}saveFilt();renderList();syncMarkers();return;}
   if(t.dataset.star){const a=byId(t.dataset.star);if(!a)return;e.stopPropagation();t.disabled=true;await write(a._id,{preferito:!(a.preferito===true)},a.preferito===true?"Tolto dai preferiti":"Aggiunto ai preferiti");t.disabled=false;return;}
   if(t.dataset.goto){S.sel=t.dataset.goto;location.hash="mappa";setTimeout(()=>select(S.sel,true),60);return;}
   if(t.dataset.sel){select(t.dataset.sel,true);return;}
