@@ -1,0 +1,36 @@
+name: Aggiorna annunci
+
+on:
+  schedule:
+    # Flatfox ogni 2 ore dalle 6 alle 22 (ora svizzera, inverno = UTC+1)
+    - cron: "5 5-21/2 * * *"
+    # Solo notifiche (per gli annunci aggiunti dagli agenti Claude) ogni 30 minuti
+    - cron: "20,50 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: aggiorna
+  cancel-in-progress: false
+
+jobs:
+  aggiorna:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+      VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pywebpush==2.0.0
+      - name: Flatfox
+        if: github.event_name == 'workflow_dispatch' || github.event.schedule == '5 5-21/2 * * *'
+        working-directory: scraper
+        run: python flatfox.py
+      - name: Notifiche
+        working-directory: scraper
+        run: python notify.py
