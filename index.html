@@ -94,6 +94,12 @@ main{padding-top:16px}
 .chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
 .chip .dot{width:8px;height:8px;border-radius:50%}
 .chip.more{margin-left:auto}
+.star{appearance:none;border:0;background:none;cursor:pointer;font-size:20px;line-height:1;color:var(--faint);padding:2px 4px;min-width:32px;min-height:32px}
+.star.on{color:#d99a0b}.star.big{font-size:24px}
+span.star{cursor:default;color:#d99a0b;font-size:18px}
+.cks{grid-column:1/-1;flex-direction:row;flex-wrap:wrap;gap:8px 18px}
+.ck{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--fg);min-height:36px;cursor:pointer}
+.ck input{width:20px;height:20px;accent-color:var(--accent)}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;margin-bottom:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
 .field{display:flex;flex-direction:column;gap:5px;min-width:0}
 .field label,.field .lab{font-size:12.5px;color:var(--muted);font-weight:500}
@@ -369,7 +375,7 @@ function fmtKm(k){return k.toLocaleString("it-IT",{maximumFractionDigits:1,minim
 function walk(k){return Math.round(k*1.3/4.8*60);}
 function plural(n,s,p){return n+" "+(n===1?s:p);}
 function loadFilt(){try{const f=JSON.parse(localStorage.getItem("csg-filt")||"null");if(f&&typeof f==="object")return Object.assign(defFilt(),f);}catch(e){}return defFilt();}
-function defFilt(){return {fasce:["In target","Poco sopra","Da verificare"],max:1600,tipo:"",stato:"",fonte:""};}
+function defFilt(){return {fasce:["In target","Poco sopra","Da verificare"],max:1600,tipo:"",stato:"",fonte:"",pref:false,km:0,entro:false,spese:false,arredato:false,nuovi:false,sort:"punteggio"};}
 function saveFilt(){try{localStorage.setItem("csg-filt",JSON.stringify(S.filt));}catch(e){}}
 function toast(msg){const t=$("#toast");t.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,2200);}
 function isActive(a){return a.stato!=="Scartato"&&a.stato!=="Non più disponibile"&&a.fascia!=="Scartato";}
@@ -439,11 +445,25 @@ function mates(a){
 function filtered(){
   const f=S.filt;
   return S.ann.filter(isActive).filter(a=>inMode(a)).filter(a=>
-    f.fasce.includes(fasciaOf(a)) &&
+    (f.pref?a.preferito===true:f.fasce.includes(fasciaOf(a))) &&
+    (!f.km||(km(a)!=null&&km(a)<=f.km)) &&
+    (!f.entro||(d(a.dal)!=null&&d(a.dal)<=FEB1)) &&
+    (!f.spese||a.spese==="incluse") &&
+    (!f.arredato||a.arredato==="sì"||a.arredato==="parziale") &&
+    (!f.nuovi||isNew(a)) &&
     (priceOf(a)==null||f.max>=1600||priceOf(a)<=f.max) &&
     (!f.tipo||a.tipo===f.tipo) && (!f.stato||a.stato===f.stato) && (!f.fonte||a.fonte===f.fonte));
 }
-function ranked(list){return list.map(a=>({a,s:score(a)})).sort((x,y)=>(y.s.total??-1)-(x.s.total??-1)||(priceOf(x.a)??1e9)-(priceOf(y.a)??1e9));}
+function ranked(list){
+  const by=S.filt.sort,P=x=>priceOf(x.a)??1e9,K=x=>km(x.a)??1e9,T=x=>d(x.a.scoperto)??0;
+  const cmp={prezzo:(x,y)=>P(x)-P(y),distanza:(x,y)=>K(x)-K(y),recenti:(x,y)=>T(y)-T(x)}[by]||((x,y)=>(y.s.total??-1)-(x.s.total??-1)||P(x)-P(y));
+  return list.map(a=>({a,s:score(a)})).sort(cmp);
+}
+function starBtn(a,big){
+  const on=a.preferito===true;
+  if(S.ro)return on?'<span class="star on" aria-label="Preferito">★</span>':"";
+  return '<button type="button" class="star'+(on?" on":"")+(big?" big":"")+'" data-star="'+esc(a._id)+'" aria-pressed="'+on+'" aria-label="'+(on?"Togli dai preferiti":"Aggiungi ai preferiti")+'">'+(on?"★":"☆")+'</button>';
+}
 function modeActive(){return S.ann.filter(a=>isActive(a)&&inMode(a)&&fasciaOf(a)!=="Fuori budget");}
 function setMode(m){if(m===S.mode)return;S.mode=m;try{localStorage.setItem("csg-mode",m);}catch(e){}S.sel=null;renderModeSwitch();renderTabs();render();syncMarkers();}
 function renderModeSwitch(){document.querySelectorAll("[data-mode]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.mode===S.mode));}
@@ -501,23 +521,28 @@ function renderList(){
      notice("Nessun annuncio con questi filtri",out&&!S.filt.fasce.includes("Fuori budget")?"Ci sono "+out+" annunci fuori budget: attiva il filtro “Fuori budget” per vederli.":"Allarga i filtri per vedere altri annunci."));
 }
 function renderFilters(){
-  const f=S.filt, cnt=(f.max<1600?1:0)+(f.tipo?1:0)+(f.stato?1:0)+(f.fonte?1:0);
-  $("#filters").innerHTML=["In target","Poco sopra","Da verificare","Fuori budget"].map(x=>'<button type="button" class="chip" data-fascia="'+esc(x)+'" aria-pressed="'+f.fasce.includes(x)+'"><span class="dot" style="background:var(--pin-'+FCLASS[x]+')"></span>'+esc(x)+'</button>').join("")+
+  const f=S.filt, cnt=(f.max<1600?1:0)+(f.tipo?1:0)+(f.stato?1:0)+(f.fonte?1:0)+(f.km?1:0)+(f.entro?1:0)+(f.spese?1:0)+(f.arredato?1:0)+(f.nuovi?1:0)+(f.sort!=="punteggio"?1:0);
+  const nPref=S.ann.filter(a=>a.preferito===true&&isActive(a)&&inMode(a)).length;
+  $("#filters").innerHTML='<button type="button" class="chip" id="f-pref" aria-pressed="'+!!f.pref+'"><span aria-hidden="true">'+(f.pref?"★":"☆")+'</span>Preferiti'+(nPref?" ("+nPref+")":"")+'</button>'+(f.pref?"":["In target","Poco sopra","Da verificare","Fuori budget"].map(x=>'<button type="button" class="chip" data-fascia="'+esc(x)+'" aria-pressed="'+f.fasce.includes(x)+'"><span class="dot" style="background:var(--pin-'+FCLASS[x]+')"></span>'+esc(x)+'</button>').join(""))+
     '<button type="button" class="chip more" id="btn-filt" aria-expanded="'+S.panel+'">'+icon("i-sliders").replace("<svg",'<svg width="15" height="15"')+'Filtri'+(cnt?" ("+cnt+")":"")+'</button>';
   const fonti=[...new Set(S.ann.map(a=>a.fonte).filter(Boolean))];
   const p=$("#filter-panel");p.hidden=!S.panel;
   if(!S.panel)return;
+  const ck=(id,on,l)=>'<label class="ck"><input type="checkbox" id="'+id+'"'+(on?" checked":"")+'>'+l+'</label>';
   p.innerHTML=
+   '<div class="field"><label for="f-sort">Ordina per</label><select id="f-sort">'+[["punteggio","Punteggio"],["prezzo","Prezzo più basso"],["distanza","Più vicini all\u2019HSG"],["recenti","Più recenti"]].map(([v,l])=>'<option value="'+v+'"'+(f.sort===v?" selected":"")+'>'+l+'</option>').join("")+'</select></div>'+
+   '<div class="field"><label for="f-km">Distanza max dall\u2019HSG: <b class="num">'+(f.km?String(f.km).replace(".",",")+" km":"nessuna")+'</b></label><input id="f-km" type="range" min="0" max="5" step="0.5" value="'+(f.km||0)+'"></div>'+
    '<div class="field"><label for="f-max">Prezzo massimo: <b class="num">'+(f.max>=1600?"nessuno":"CHF "+f.max)+'</b></label><input id="f-max" type="range" min="300" max="1600" step="10" value="'+f.max+'"></div>'+
    '<div class="field"><label for="f-tipo">Tipo</label><select id="f-tipo"><option value="">Tutti</option>'+[["stanza","Stanza"],["monolocale","Monolocale"],["appartamento","Appartamento per due"]].map(([v,l])=>'<option value="'+v+'"'+(f.tipo===v?" selected":"")+'>'+l+'</option>').join("")+'</select></div>'+
    '<div class="field"><label for="f-stato">Stato</label><select id="f-stato"><option value="">Tutti</option>'+STATI.slice(0,6).map(v=>'<option'+(f.stato===v?" selected":"")+'>'+esc(v)+'</option>').join("")+'</select></div>'+
    '<div class="field"><label for="f-fonte">Fonte</label><select id="f-fonte"><option value="">Tutte</option>'+fonti.map(v=>'<option'+(f.fonte===v?" selected":"")+'>'+esc(v)+'</option>').join("")+'</select></div>'+
+   '<div class="field cks">'+ck("f-entro",f.entro,"Ingresso entro il 1° febbraio")+ck("f-spese",f.spese,"Spese incluse")+ck("f-arredato",f.arredato,"Arredato")+ck("f-nuovi",f.nuovi,"Solo nuovi (ultimi 2 giorni)")+'</div>'+
    '<div class="field" style="justify-content:flex-end"><button type="button" class="btn ghost" id="f-reset">Azzera filtri</button></div>';
 }
 function card(a,s){
   const k=km(a), m=mates(a), fl=flags(a).slice(0,3), link=safeUrl(a.link), fa=fasciaOf(a);
   return '<article class="card" data-open="'+esc(a._id)+'">'+
-   '<div class="row"><span class="kind">'+esc(tipoLabel(a))+'</span><span class="badges">'+(isNew(a)?'<span class="badge b-new">Nuovo</span>':"")+'<span class="badge f-'+(FCLASS[fa]||"info")+'">'+esc(fa)+'</span></span></div>'+
+   '<div class="row"><span class="kind">'+esc(tipoLabel(a))+'</span><span class="badges">'+(isNew(a)?'<span class="badge b-new">Nuovo</span>':"")+'<span class="badge f-'+(FCLASS[fa]||"info")+'">'+esc(fa)+'</span>'+starBtn(a)+'</span></div>'+
    '<div><h3>'+esc(a.indirizzo||a.titolo)+'</h3><div class="where">'+[a.zona&&esc(a.zona),k!=null&&(fmtKm(k)+" dall'HSG · ≈ "+walk(k)+" min a piedi")].filter(Boolean).join(" · ")+'</div></div>'+
    '<div class="price"><b class="num">'+esc(priceText(a))+'</b><small>'+esc(priceSub(a))+'</small>'+(a.spese==="incluse"?'<span class="badge f-ok">spese incluse</span>':a.spese==="escluse"?'<span class="badge f-warn">spese escluse</span>':"")+'</div>'+
    '<dl class="facts">'+
@@ -650,7 +675,7 @@ function renderDetail(fresh){
   if(!fresh && el.contains(document.activeElement) && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName))return;
   const s=score(a),k=km(a),link=safeUrl(a.link),fl=flags(a),p=period(a);
   el.innerHTML=
-   '<div class="d-head"><button type="button" class="back" data-close>'+icon("i-back").replace("<svg",'<svg width="16" height="16"')+'Indietro</button><span class="badges">'+(isNew(a)?'<span class="badge b-new">Nuovo</span>':"")+'<span class="badge f-'+(FCLASS[fasciaOf(a)]||"info")+'">'+esc(fasciaOf(a))+'</span></span></div>'+
+   '<div class="d-head"><button type="button" class="back" data-close>'+icon("i-back").replace("<svg",'<svg width="16" height="16"')+'Indietro</button><span class="badges">'+(isNew(a)?'<span class="badge b-new">Nuovo</span>':"")+'<span class="badge f-'+(FCLASS[fasciaOf(a)]||"info")+'">'+esc(fasciaOf(a))+'</span>'+starBtn(a,true)+'</span></div>'+
    '<div class="kind">'+esc(tipoLabel(a))+'</div><h2 style="font-size:22px;margin-top:2px">'+esc(a.indirizzo||a.titolo)+'</h2>'+
    '<div class="where">'+[a.zona&&esc(a.zona),k!=null&&(fmtKm(k)+" dall’HSG · ≈ "+walk(k)+" min a piedi"+(a.posApprox?" (approssimativa)":""))].filter(Boolean).join(" · ")+'</div>'+
    '<div class="price" style="margin-top:10px"><b class="num">'+esc(priceText(a))+'</b><small>'+esc(priceSub(a))+(a.prezzoNota&&!(S.mode==="due"&&a.perChi!=="due")?" · "+esc(a.prezzoNota):"")+'</small></div>'+
@@ -747,7 +772,9 @@ document.addEventListener("click",async e=>{
   if(t.dataset.mode){setMode(t.dataset.mode);return;}
   if(t.dataset.fascia){const f=S.filt.fasce,x=t.dataset.fascia;S.filt.fasce=f.includes(x)?f.filter(y=>y!==x):f.concat(x);saveFilt();renderList();return;}
   if(t.id==="btn-filt"){S.panel=!S.panel;renderFilters();return;}
-  if(t.id==="f-reset"){S.filt=defFilt();saveFilt();renderList();return;}
+  if(t.id==="f-reset"){S.filt=defFilt();saveFilt();renderList();syncMarkers();return;}
+  if(t.id==="f-pref"){S.filt.pref=!S.filt.pref;saveFilt();renderList();syncMarkers();return;}
+  if(t.dataset.star){const a=byId(t.dataset.star);if(!a)return;e.stopPropagation();t.disabled=true;await write(a._id,{preferito:!(a.preferito===true)},a.preferito===true?"Tolto dai preferiti":"Aggiunto ai preferiti");t.disabled=false;return;}
   if(t.dataset.goto){S.sel=t.dataset.goto;location.hash="mappa";setTimeout(()=>select(S.sel,true),60);return;}
   if(t.dataset.sel){select(t.dataset.sel,true);return;}
   if(t.id==="sheet-x"){select(null);return;}
@@ -778,7 +805,9 @@ document.addEventListener("input",e=>{
 });
 document.addEventListener("change",e=>{
   const t=e.target;
-  if(t.id==="f-tipo"||t.id==="f-stato"||t.id==="f-fonte"){S.filt[t.id.slice(2)]=t.value;saveFilt();renderList();return;}
+  if(t.id==="f-tipo"||t.id==="f-stato"||t.id==="f-fonte"||t.id==="f-sort"){S.filt[t.id.slice(2)]=t.value;saveFilt();renderList();syncMarkers();return;}
+  if(["f-entro","f-spese","f-arredato","f-nuovi"].includes(t.id)){S.filt[t.id.slice(2)]=t.checked;saveFilt();renderList();syncMarkers();return;}
+  if(t.id==="f-km"){S.filt.km=+t.value;saveFilt();renderList();syncMarkers();return;}
   if(t.id==="d-stato"){$("#d-motivo-wrap").hidden=t.value!=="Scartato";}
 });
 $("#overlay").addEventListener("click",e=>{if(e.target.id==="overlay")closeDetail();});
