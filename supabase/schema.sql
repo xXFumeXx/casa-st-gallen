@@ -90,6 +90,17 @@ create policy "push: membri gestiscono le proprie" on public.push_sub for all to
 revoke execute on function public.patch_annuncio(text, jsonb) from public, anon;
 grant execute on function public.patch_annuncio(text, jsonb) to authenticated, service_role;
 
+-- Accesso alle tabelle tramite l'API (le regole sopra decidono le righe visibili).
+grant usage on schema public to anon, authenticated, service_role;
+grant select on public.membri to authenticated;
+grant select, update on public.annunci to authenticated;
+grant select on public.controlli to authenticated;
+grant select, insert, update, delete on public.impostazioni to authenticated;
+grant select, insert, update, delete on public.push_sub to authenticated;
+grant all on public.membri, public.annunci, public.controlli, public.impostazioni, public.push_sub to service_role;
+grant execute on function public.is_member() to authenticated;
+grant execute on function public.is_owner() to authenticated;
+
 -- Aggiornamenti in tempo reale nell'app.
 do $$ begin
   begin alter publication supabase_realtime add table public.annunci; exception when duplicate_object then null; end;

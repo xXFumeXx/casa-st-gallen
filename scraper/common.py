@@ -13,6 +13,7 @@ UA = "Mozilla/5.0 (casa-st-gallen-app)"
 def http_json(url, method="GET", body=None, headers=None, timeout=40):
     data = None if body is None else json.dumps(body).encode()
     req = urllib.request.Request(url, data=data, method=method, headers={"User-Agent": UA, **(headers or {})})
+    # Le chiavi segrete Supabase rifiutano richieste che sembrano venire da un browser.
     if data is not None:
         req.add_header("Content-Type", "application/json")
     with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -24,7 +25,9 @@ def sb(path, method="GET", body=None, prefer=None, params=None):
     url = f"{SUPABASE_URL}/rest/v1/{path}"
     if params:
         url += "?" + urllib.parse.urlencode(params)
-    h = {"apikey": SERVICE_KEY, "Authorization": f"Bearer {SERVICE_KEY}"}
+    h = {"apikey": SERVICE_KEY, "User-Agent": "casa-st-gallen-scraper/1.0"}
+    if SERVICE_KEY.startswith("ey"):          # chiave "legacy" in formato JWT
+        h["Authorization"] = f"Bearer {SERVICE_KEY}"
     if prefer:
         h["Prefer"] = prefer
     return http_json(url, method, body, h)
