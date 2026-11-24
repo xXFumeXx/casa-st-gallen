@@ -1,5 +1,5 @@
 // Service worker: app installabile, apertura veloce e notifiche push.
-const CACHE = "casa-sg-v1";
+const CACHE = "casa-sg-v2";
 const SHELL = ["./", "./index.html", "./config.js", "./manifest.webmanifest", "./icons/icon-192.png"];
 
 self.addEventListener("install", e => {
@@ -13,7 +13,8 @@ self.addEventListener("fetch", e => {
   const u = new URL(e.request.url);
   if (e.request.method !== "GET" || u.origin !== location.origin) return;
   e.respondWith(
-    fetch(e.request).then(r => {
+    // no-cache: chiede sempre al server se c'è una versione nuova (evita la copia vecchia di 10 minuti).
+    fetch(new Request(e.request.url, { cache: "no-cache", credentials: "same-origin" })).then(r => {
       if (r.ok) { const copy = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }
       return r;
     }).catch(() => caches.match(e.request).then(r => r || caches.match("./index.html")))
