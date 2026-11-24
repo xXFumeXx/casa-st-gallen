@@ -208,6 +208,8 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 details.d-section summary{cursor:pointer;font:600 14px var(--font-head);list-style:none;display:flex;justify-content:space-between}
 details.d-section summary::-webkit-details-marker{display:none}
 details.d-section[open] summary{margin-bottom:12px}
+.seg-stato{display:flex;flex-wrap:wrap;gap:8px}
+.mine .mt{margin-top:10px}
 .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .form-grid .wide{grid-column:1/-1}
 .err{color:var(--bad);font-size:12.5px}
@@ -518,7 +520,7 @@ function renderList(){
   const list=ranked(filtered());
   $("#list").innerHTML=list.length?list.map(({a,s})=>card(a,s)).join(""):
     (S.mode==="due"&&!S.ann.some(a=>inMode(a,"due"))?notice("Ancora nessun annuncio per due","L’agente cerca appartamenti con 2 camere e WG con 2 stanze libere a ogni controllo. Compariranno qui."):
-     notice("Nessun annuncio con questi filtri",out&&!S.filt.fasce.includes("Fuori budget")?"Ci sono "+out+" annunci fuori budget: attiva il filtro “Fuori budget” per vederli.":"Allarga i filtri per vedere altri annunci."));
+     S.filt.ris?notice("Nessun annuncio di riserva","Apri un annuncio e tocca “Di riserva” per metterlo qui."):notice("Nessun annuncio con questi filtri",out&&!S.filt.fasce.includes("Fuori budget")?"Ci sono "+out+" annunci fuori budget: attiva il filtro “Fuori budget” per vederli.":"Allarga i filtri per vedere altri annunci."));
 }
 function renderFilters(){
   const f=S.filt, cnt=(f.max<1600?1:0)+(f.tipo?1:0)+(f.stato?1:0)+(f.fonte?1:0)+(f.km?1:0)+(f.entro?1:0)+(f.spese?1:0)+(f.arredato?1:0)+(f.nuovi?1:0)+(f.sort!=="punteggio"?1:0);
@@ -685,6 +687,13 @@ function renderDetail(fresh){
    '<div class="actions" style="margin-top:12px">'+(link?'<a class="btn primary" href="'+esc(link)+'" target="_blank" rel="noopener">'+icon("i-ext")+'Apri annuncio</a>':"")+
      (num(a.lat)!=null?'<a class="btn" href="'+esc(routeUrl(a))+'" target="_blank" rel="noopener">'+icon("i-route")+'Percorso</a>':(safeUrl(a.mappaLink)?'<a class="btn" href="'+esc(a.mappaLink)+'" target="_blank" rel="noopener">'+icon("i-pin")+'Google Maps</a>':""))+'</div>'+
 
+   (S.ro?"":
+   '<div class="d-section mine"><h3>'+icon("i-edit")+'Stato e note</h3>'+
+     '<div class="seg-stato">'+["Da aprire","Contattato","Visita fissata","Presa","Di riserva","Scartato"].map(x=>'<button type="button" class="chip" data-stato="'+esc(x)+'" aria-pressed="'+((a.stato||"Da aprire")===x)+'"><span class="dot" style="background:'+SCOLOR[x]+'"></span>'+esc(x)+'</button>').join("")+'</div>'+
+     (a.stato==="Non più disponibile"?'<p class="where" style="margin-top:8px">Segnato come non più disponibile.</p>':"")+
+     (a.stato==="Scartato"?'<input type="text" id="d-motivo" class="mt" value="'+esc(a.motivo||"")+'" placeholder="Perché l’hai scartato? (facoltativo)">':"")+
+     '<textarea id="d-note" class="mt" placeholder="Scrivi una nota… si salva da sola">'+esc(a.note||"")+'</textarea>'+
+   '</div>')+
    '<div class="d-section"><h3>'+icon("i-doc")+'Condizioni</h3><div class="kv">'+
      '<div><span>Periodo</span><b>'+periodText(a)+'</b></div>'+
      '<div><span>Contratto</span>'+val(a.contratto?a.contratto[0].toUpperCase()+a.contratto.slice(1):(a.finoTesto&&a.finoTesto!=="Non letto"?a.finoTesto:null))+'</div>'+
@@ -710,15 +719,10 @@ function renderDetail(fresh){
 
    (S.ro?
    '<div class="d-section"><h3>'+icon("i-edit")+'Stato e note</h3><div class="kv"><div><span>Stato</span><b>'+esc(a.stato||"—")+'</b></div><div><span>Prossimo passo</span>'+val(a.prossimo)+'</div></div>'+(a.note?'<p class="prose" style="margin-top:10px">'+esc(a.note)+'</p>':"")+'</div>':
-   '<div class="d-section"><h3>'+icon("i-edit")+'Stato, prossimo passo e note</h3><div class="form-grid">'+
-     '<div class="field"><label for="d-stato">Stato</label><select id="d-stato">'+opt(STATI.map(x=>[x,x]),a.stato)+'</select></div>'+
-     '<div class="field"><label for="d-fascia">Fascia</label><select id="d-fascia">'+opt([["","Automatica (dal prezzo)"],["Da verificare","Da verificare"]],a.fascia==="Da verificare"?"Da verificare":"")+'</select></div>'+
-     '<div class="field wide" id="d-motivo-wrap"'+(a.stato==="Scartato"?"":" hidden")+'><label for="d-motivo">Motivo dello scarto</label><input type="text" id="d-motivo" value="'+esc(a.motivo||"")+'" placeholder="Troppo lontano dall’HSG"><span class="err" id="d-motivo-err" hidden>Scrivi il motivo prima di salvare.</span></div>'+
-     '<div class="field wide"><label for="d-prossimo">Prossimo passo</label><input type="text" id="d-prossimo" value="'+esc(a.prossimo||"")+'"></div>'+
-     '<div class="field wide"><label for="d-note">Note</label><textarea id="d-note">'+esc(a.note||"")+'</textarea></div>'+
-   '</div></div>'+
 
    '<details class="d-section" id="d-edit"><summary>Modifica dati dell’annuncio <span style="color:var(--muted);font-weight:500">'+icon("i-edit").replace("<svg",'<svg width="16" height="16"')+'</span></summary><div class="form-grid">'+
+     '<div class="field wide"><label for="d-prossimo">Prossimo passo</label><input type="text" id="d-prossimo" value="'+esc(a.prossimo||"")+'"></div>'+
+     '<div class="field"><label for="d-fascia">Fascia</label><select id="d-fascia">'+opt([["","Automatica (dal prezzo)"],["Da verificare","Da verificare"]],a.fascia==="Da verificare"?"Da verificare":"")+'</select></div>'+
      '<div class="field wide"><label for="e-indirizzo">Indirizzo</label><input type="text" id="e-indirizzo" value="'+esc(a.indirizzo||"")+'"></div>'+
      '<div class="field"><label for="e-perChi">Per chi</label><select id="e-perChi">'+opt([["solo","Da solo"],["due","Per due"]],a.perChi==="due"?"due":"solo")+'</select></div>'+
      '<div class="field"><label for="e-prezzoDue">2 stanze libere: prezzo totale CHF</label><input type="number" inputmode="numeric" id="e-prezzoDue" value="'+esc(a.prezzoDue??"")+'" placeholder="Solo se ci sono 2 stanze"></div>'+
@@ -752,9 +756,9 @@ function collect(){
   const g=id=>{const e=document.getElementById(id);return e?e.value.trim():"";};
   const n=id=>{const v=g(id);return v===""?null:num(v);};
   const t=id=>{const v=g(id);return v===""?null:v;};
-  const patch={stato:g("d-stato"),fascia:t("d-fascia"),prossimo:t("d-prossimo"),note:t("d-note"),motivo:g("d-stato")==="Scartato"?t("d-motivo"):(t("d-motivo")||null)};
+  const cur=byId(S.detail)||{};
+  const patch={fascia:cur.stato==="Scartato"?"Scartato":t("d-fascia"),prossimo:t("d-prossimo")};
   if(document.getElementById("e-tipo")){const pd=n("e-prezzoDue");Object.assign(patch,{perChi:g("e-perChi")||"solo",prezzoDue:pd,dueStanzeLibere:pd!=null&&g("e-perChi")!=="due",indirizzo:t("e-indirizzo"),tipo:t("e-tipo"),mq:n("e-mq"),prezzo:n("e-prezzo"),cauzione:n("e-cauzione"),dal:t("e-dal"),fino:t("e-fino"),contratto:t("e-contratto"),spese:t("e-spese"),arredato:t("e-arredato"),registrazione:t("e-registrazione"),coinquilini:n("e-coinquilini"),coinqProfilo:t("e-coinqProfilo"),coinqEta:t("e-coinqEta"),lingue:t("e-lingue"),bagno:t("e-bagno"),unaTantum:t("e-unaTantum"),servizi:g("e-servizi").split(",").map(x=>x.trim()).filter(Boolean)});}
-  if(patch.stato==="Scartato")patch.fascia="Scartato";
   return patch;
 }
 async function write(id,patch,okMsg){
@@ -793,10 +797,11 @@ document.addEventListener("click",async e=>{
   if(t.id==="hint-x"){try{localStorage.setItem("csg-hint","1");}catch(e){}$("#install-hint").innerHTML="";return;}
   if(t.id==="d-save"){
     const patch=collect();
-    if(patch.stato==="Scartato"&&!patch.motivo){$("#d-motivo-err").hidden=false;$("#d-motivo").focus();return;}
     t.disabled=true;t.textContent="Salvo…";const ok=await write(S.detail,patch);t.disabled=false;t.textContent="Salva modifiche";
-    if(ok&&!isActive(Object.assign({},byId(S.detail),patch)))closeDetail();
     return;}
+  if(t.dataset.stato){const a=byId(S.detail);if(!a||(a.stato||"Da aprire")===t.dataset.stato)return;const x=t.dataset.stato;
+    const patch={stato:x,fascia:x==="Scartato"?"Scartato":(a.fascia==="Scartato"?null:a.fascia??null)};
+    await write(a._id,patch,"Stato: "+x);return;}
   if(t.dataset.open){openDetail(t.dataset.open);return;}
 });
 document.addEventListener("input",e=>{
@@ -804,14 +809,13 @@ document.addEventListener("input",e=>{
   if(t.id==="f-max"){S.filt.max=+t.value;saveFilt();const lab=t.previousElementSibling.querySelector("b");if(lab)lab.textContent=S.filt.max>=1600?"nessuno":"CHF "+S.filt.max;$("#list").innerHTML=ranked(filtered()).map(({a,s})=>card(a,s)).join("")||notice("Nessun annuncio con questi filtri","Allarga i filtri per vedere altri annunci.");return;}
   if(t.dataset.w){wDraft.pesi[t.dataset.w]=+t.value;const tot=Object.values(wDraft.pesi).reduce((x,y)=>x+y,0)||1;document.querySelectorAll("[data-w]").forEach(i=>i.nextElementSibling.textContent=Math.round(wDraft.pesi[i.dataset.w]/tot*100));return;}
   if(t.id==="w-pen"){wDraft.penalitaMese=+t.value;t.nextElementSibling.textContent="−"+t.value;return;}
-  if(t.id==="d-motivo")$("#d-motivo-err").hidden=true;
 });
 document.addEventListener("change",e=>{
   const t=e.target;
   if(t.id==="f-tipo"||t.id==="f-stato"||t.id==="f-fonte"||t.id==="f-sort"){S.filt[t.id.slice(2)]=t.value;saveFilt();renderList();syncMarkers();return;}
   if(["f-entro","f-spese","f-arredato","f-nuovi"].includes(t.id)){S.filt[t.id.slice(2)]=t.checked;saveFilt();renderList();syncMarkers();return;}
   if(t.id==="f-km"){S.filt.km=+t.value;saveFilt();renderList();syncMarkers();return;}
-  if(t.id==="d-stato"){$("#d-motivo-wrap").hidden=t.value!=="Scartato";}
+  if((t.id==="d-note"||t.id==="d-motivo")&&S.detail){const k=t.id==="d-note"?"note":"motivo",v=t.value.trim()||null,a=byId(S.detail);if(a&&(a[k]??null)!==v)write(a._id,{[k]:v},t.id==="d-note"?"Nota salvata":"Salvato");}
 });
 $("#overlay").addEventListener("click",e=>{if(e.target.id==="overlay")closeDetail();});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&S.detail)closeDetail();});
