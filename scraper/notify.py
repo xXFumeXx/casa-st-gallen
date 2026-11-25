@@ -11,8 +11,10 @@ VAPID_SUB = (os.environ.get("VAPID_SUBJECT") or "").strip()
 # Deve essere "mailto:..." o "https://...": altrimenti la firma delle notifiche fallisce.
 if VAPID_SUB and "@" in VAPID_SUB and not VAPID_SUB.startswith("mailto:"):
     VAPID_SUB = "mailto:" + VAPID_SUB
+if VAPID_SUB.startswith("https://"):
+    VAPID_SUB = "https://" + VAPID_SUB[8:].split("/")[0]   # solo schema + host, senza percorso
 if not VAPID_SUB.startswith(("mailto:", "https://")):
-    VAPID_SUB = "https://xxfumexx.github.io/casa-st-gallen/"
+    VAPID_SUB = "https://xxfumexx.github.io"
 
 
 def main():
