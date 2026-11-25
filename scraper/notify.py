@@ -7,7 +7,12 @@ from pywebpush import webpush, WebPushException
 from common import sb
 
 VAPID_PRIVATE = os.environ["VAPID_PRIVATE_KEY"]          # chiave privata (base64url, formato raw)
-VAPID_SUB = os.environ.get("VAPID_SUBJECT", "https://github.com")
+VAPID_SUB = (os.environ.get("VAPID_SUBJECT") or "").strip()
+# Deve essere "mailto:..." o "https://...": altrimenti la firma delle notifiche fallisce.
+if VAPID_SUB and "@" in VAPID_SUB and not VAPID_SUB.startswith("mailto:"):
+    VAPID_SUB = "mailto:" + VAPID_SUB
+if not VAPID_SUB.startswith(("mailto:", "https://")):
+    VAPID_SUB = "https://xxfumexx.github.io/casa-st-gallen/"
 
 
 def main():
