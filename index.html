@@ -572,8 +572,8 @@ function card(a,s){
 /* ---------- map ---------- */
 let map=null, layers={}, markers={};
 function makeLayer(name){
-  const id=name==="sat"?"ch.swisstopo.swissimage":"ch.swisstopo.pixelkarte-farbe";
-  return L.tileLayer("https://wmts.geo.admin.ch/1.0.0/"+id+"/default/current/3857/{z}/{x}/{y}.jpeg",{minZoom:11,maxZoom:19,maxNativeZoom:name==="sat"?19:18,attribution:'© <a href="https://www.swisstopo.admin.ch/" target="_blank" rel="noopener">swisstopo</a>'});
+  if(name==="sat")return L.tileLayer("https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/{z}/{x}/{y}.jpeg",{minZoom:11,maxZoom:19,maxNativeZoom:19,attribution:'© <a href="https://www.swisstopo.admin.ch/" target="_blank" rel="noopener">swisstopo</a>'});
+  return L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{minZoom:11,maxZoom:19,maxNativeZoom:19,attribution:'© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'});
 }
 function ensureMap(){
   if(!window.L){$("#map").innerHTML='<div class="notice" style="margin:16px">La libreria della mappa non si è caricata. Usa i link Google Maps nella lista.</div>';renderMapSide();return;}
